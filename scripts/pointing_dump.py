@@ -4,6 +4,8 @@ import redis
 import yaml
 import time
 import logging
+import pika
+import queue
 import pandas as pd
 from influxdb import InfluxDBClient, DataFrameClient
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -13,6 +15,8 @@ from astropy.time import Time, TimeMJD
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 r = redis.StrictRedis(host='serendip6',port='6379')#6379 is the default port
+
+valid_queue = queue.Queue(60)
 
 def get_pipe():
     pipe = r.pipeline()
@@ -28,7 +32,7 @@ def get_pipe():
         
     return pipe
 
-with open("/home/artemis/programs/greenburst/dev_trunk/config/conf.yaml", 'r') as stream:
+with open("/home/artemis/programs/alfaburst/scripts/config/conf.yaml", 'r') as stream:
     data_loaded = yaml.load(stream)
     login_detail = data_loaded['influxdb']
     client = DataFrameClient(host=login_detail['host'],
@@ -36,11 +40,27 @@ with open("/home/artemis/programs/greenburst/dev_trunk/config/conf.yaml", 'r') a
                              username=login_detail['uname'],
                              password=login_detail['passw'],
                              database=login_detail['db'])
+    login_detail = data_loaded['rabbit']
+    headnode = login_detail['headnode']
+    user = login_detail['user']
+    password = login_detail['password']
+
+def record_data(status):
+    credentials = pika.PlainCredentials(user,password)
+    connection = pika.BlockingConnection(pika.ConnectionParameters(headnode, 5672, '/', credentials))
+    channel = connection.channel()                                                                                                                                                                       
+                                                                                                                                                                                                                                                                                     
+    channel.queue_declare(queue='recorder_beam0', durable=True)
+
+    channel.basic_publish(exchange='',
+	                  routing_key='recorder_beam0',
+			  body=f'{status}')
+
 
 def main():
     pipe = get_pipe()
     value = pipe.execute()
-    keys = ['sig_source_gregorian', 'rec_AFLA_enabled', 'rf_center_freq', 'MJD']
+    keys = ['sig_source_gregorian', 'rec_ALFA_enabled', 'rf_center_freq', 'MJD']
     for j in range(0,7):
         keys.append(f'ra{j}')
         keys.append(f'dec{j}')
@@ -48,14 +68,19 @@ def main():
     for j, k in enumerate(keys):
         telescope_status[k] = float(value[j][0].decode())
      
-    if telescope_status['sig_source_gregorian'] == 1.0 and telescope_status['rec_ALFA_enabled'] == 1.0:
+    if telescope_status['sig_source_gregorian'] == 0.0 and telescope_status['rec_ALFA_enabled'] == 1.0:
         telescope_status['data_valid'] = 1.0
+        valid_queue.put(1.0)
     else:
          telescope_status['data_valid'] = 0.0
-             
+
     df=pd.DataFrame(telescope_status,index=[pd.to_datetime(Time(telescope_status['MJD'],format='mjd').iso)])
     logging.debug(df.values.tolist())
     val=client.write_points(df,measurement='telescope',time_precision='n')
+    if valid_queue.full():
+        record_data(True)
+    else:
+        record_data(False)
 
 if __name__ == '__main__':
     main()
