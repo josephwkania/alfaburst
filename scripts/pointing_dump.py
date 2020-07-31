@@ -49,12 +49,13 @@ def record_data(status):
     credentials = pika.PlainCredentials(user,password)
     connection = pika.BlockingConnection(pika.ConnectionParameters(headnode, 5672, '/', credentials))
     channel = connection.channel()                                                                                                                                                                       
-                                                                                                                                                                                                                                                                                     
-    channel.queue_declare(queue='recorder_beam0', durable=True)
+    
+    for j in np.arange(0,7):
+        channel.queue_declare(queue=f'recorder_beam{j}', durable=True)
 
-    channel.basic_publish(exchange='',
-	                  routing_key='recorder_beam0',
-			  body=f'{status}')
+        channel.basic_publish(exchange='',
+	                      routing_key=f'recorder_beam{j}',
+	    	       	      body=f'{status}')
 
 
 def main():
