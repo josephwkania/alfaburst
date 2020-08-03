@@ -27,7 +27,7 @@ def create_watcher(beam):
     Parameters:
     beam (int): the beam number to make a watcher 
     """
-    global watcher
+    global watcher 
     watcher = Watcher('cheeta', f'/home/artemis/development/arecibo/dev/build/linux/gcc/release/work/arecibo/alfaburst_16bit --config /home/artemis/configs/beam{beam}.xml -p empty -s udp')
     #watcher to run the data recorder, keep as a global variable
 
@@ -39,10 +39,8 @@ def record_fil(status, beam):
     status (string): a 'True'/'False' string the determines if data should be taken
     """   
     if status == 'True':
-        print(watcher.status)
         logging.info('Recieved True, starting watcher')
         try:
-            print('Starting watcher')
             watcher.start()
         except Exception as e:
             logging.info(f'Watcher cannot be started: {e}')

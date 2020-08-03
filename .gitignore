@@ -1,2 +1,3 @@
 scripts/config
-script/pp
+scripts/pp
+scripts/*_pp
